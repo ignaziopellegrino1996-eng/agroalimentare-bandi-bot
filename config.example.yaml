@@ -48,6 +48,7 @@ filtering:
     - PSP
     - FEASR
     - FEAMP
+    - FEAMPA
     - Leader
     - GAL
     - bioeconomia
@@ -71,6 +72,15 @@ filtering:
     - Contratti di Filiera
     - Generazione Terra
     - ISMEA
+    # Parole chiave geografiche — favoriscono bandi rilevanti per la Sicilia
+    - Sicilia
+    - siciliano
+    - siciliana
+    - Mezzogiorno
+    - Sud Italia
+    - Resto al Sud
+    - ZES
+    - ZES unica
   exclude_keywords:
     - concorso
     - selezione personale
@@ -82,6 +92,30 @@ filtering:
     - avviso di selezione
     - graduatoria
     - incarico
+    # Bandi specifici per altre regioni (non applicabili in Sicilia)
+    - Regione Lombardia
+    - Regione Veneto
+    - Regione Piemonte
+    - Regione Emilia-Romagna
+    - Regione Toscana
+    - Regione Lazio
+    - Regione Campania
+    - Regione Puglia
+    - Regione Calabria
+    - Regione Sardegna
+    - Regione Basilicata
+    - Regione Umbria
+    - Regione Marche
+    - Regione Abruzzo
+    - Regione Liguria
+    - Regione Friuli
+    - Regione Trentino
+    - Regione Valle d'Aosta
+    - Regione Molise
+    - PAT Trento
+    - PAB Bolzano
+    - solo per le imprese della Regione
+    - riservato alle imprese della Regione
 
 weekly:
   lookback_days: 7
