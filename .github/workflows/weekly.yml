@@ -1,0 +1,59 @@
+name: weekly
+
+on:
+  schedule:
+    # Monday 08:05 Europe/Rome = 07:05 UTC (CET, winter)
+    - cron: "5 7 * * 1"
+    # Monday 08:05 Europe/Rome = 06:05 UTC (CEST, summer/DST)
+    - cron: "5 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Restore SQLite state cache
+        uses: actions/cache@v4
+        with:
+          path: data/state.sqlite3
+          key: agrobandi-sqlite-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            agrobandi-sqlite-${{ runner.os }}-${{ github.ref_name }}-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── MANUAL dispatch ──────────────────────────────────────────────────────
+      - name: Run weekly report (MANUAL)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p data
+          python run.py \
+            --weekly-once \
+            --config config.example.yaml \
+            --sources sources.yaml \
+            --log-level INFO
+
+      # ── SCHEDULED: guarded at 08:05 Monday Rome ±10 min ─────────────────────
+      - name: Run weekly report (SCHEDULED)
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          mkdir -p data
+          python run.py \
+            --weekly-once \
+            --config config.example.yaml \
+            --sources sources.yaml \
+            --expect-weekday mon \
+            --expect-local-time 08:05 \
+            --log-level INFO

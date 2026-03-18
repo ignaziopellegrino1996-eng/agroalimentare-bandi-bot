@@ -1,0 +1,216 @@
+# Fonti monitorate dal bot Agroalimentare - Bandi e Avvisi
+# Legacoop Sicilia
+
+sources:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 🇪🇺  LIVELLO EUROPEO
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - id: eu_funding_tenders
+    name: "Funding & Tenders Portal (UE)"
+    level: EU
+    kind: html
+    url: "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-search;callStatus=31,8;sortBy=startDate;sortOrder=0;onlyIbo=false;freeTextSearch=agriculture%20food"
+    parser: generic_links
+    enabled: true
+
+  - id: rea_horizon
+    name: "REA – Research Executive Agency"
+    level: EU
+    kind: html
+    url: "https://rea.ec.europa.eu/funding-and-grants/horizon-europe/cluster-6-food-bioeconomy-natural-resources-agriculture-and-environment_en"
+    parser: generic_links
+    enabled: true
+
+  - id: horizon_ncp_cluster6
+    name: "Horizon Europe NCP Portal – Cluster 6"
+    level: EU
+    kind: html
+    url: "https://horizoneuropencpportal.eu/cluster-6"
+    parser: generic_links
+    enabled: true
+
+  - id: eit_food
+    name: "EIT Food – Innovazione Agrifood"
+    level: EU
+    kind: html
+    url: "https://www.eitfood.eu/open-calls"
+    parser: generic_links
+    enabled: true
+
+  - id: europa_innovazione
+    name: "Europa Innovazione"
+    level: EU
+    kind: html
+    url: "https://www.europainnovazione.com/bandi/?settore=agroalimentare"
+    parser: generic_links
+    enabled: true
+
+  - id: europafacile
+    name: "EuropaFacile (ART-ER)"
+    level: EU
+    kind: html
+    url: "https://www.europafacile.net/Bandi/?tematica=Agricoltura%20e%20sviluppo%20rurale"
+    parser: europafacile_bandi
+    enabled: true
+
+  - id: obiettivo_europa
+    name: "Obiettivo Europa"
+    level: EU
+    kind: html
+    url: "https://www.obiettivoeuropa.com/bandi-aperti/?settore=agricoltura"
+    parser: generic_links
+    enabled: true
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 🇮🇹  LIVELLO NAZIONALE
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - id: masaf
+    name: "MASAF – Ministero Agricoltura"
+    level: IT
+    kind: html
+    url: "https://www.masaf.gov.it/comunicazione/bandi-e-avvisi"
+    parser: masaf_bandi
+    enabled: true
+
+  - id: ismea
+    name: "ISMEA – Istituto Servizi Mercati Agricoli"
+    level: IT
+    kind: html
+    url: "https://www.ismea.it/flex/cm/pages/ServeBLOB.php/L/IT/IDPagina/11579"
+    parser: ismea_bandi
+    enabled: true
+
+  - id: invitalia
+    name: "Invitalia – Incentivi Agroalimentare"
+    level: IT
+    kind: html
+    url: "https://www.invitalia.it/cosa-facciamo/rafforziamo-le-imprese"
+    parser: invitalia_bandi
+    enabled: true
+
+  - id: simest
+    name: "SIMEST – Fondo 394 Internazionalizzazione"
+    level: IT
+    kind: html
+    url: "https://www.simest.it/agevolazioni"
+    parser: generic_links
+    enabled: true
+
+  - id: gse
+    name: "GSE – Parco Agrisolare e Rinnovabili"
+    level: IT
+    kind: html
+    url: "https://www.gse.it/servizi-per-te/agrienergia/parco-agrisolare"
+    parser: generic_links
+    enabled: true
+
+  - id: fasi
+    name: "FASI.eu – Fondi e Agevolazioni"
+    level: IT
+    kind: html
+    url: "https://fasi.eu/it/bandi/nazionali.html?settore=agroalimentare"
+    parser: fasi_bandi
+    enabled: true
+
+  - id: italian_food_news
+    name: "Italian Food News – Bandi Agrifood"
+    level: IT
+    kind: html
+    url: "https://www.italianfoodnews.com/it/news/finanziamenti-e-agevolazioni"
+    parser: generic_links
+    enabled: true
+
+  - id: mimit_rss
+    name: "MIMIT – Ministero Imprese e Made in Italy"
+    level: IT
+    kind: rss
+    url: "https://www.mimit.gov.it/index.php?format=feed&type=rss"
+    parser: null
+    enabled: true
+
+  - id: inail_isi
+    name: "INAIL – Bando ISI Sicurezza Lavoro"
+    level: IT
+    kind: html
+    url: "https://www.inail.it/cs/internet/attivita/prevenzione-e-sicurezza/agevolazioni/bandi-isi.html"
+    parser: generic_links
+    enabled: true
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 🏴  LIVELLO SICILIA
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - id: sviluppo_rurale_sicilia
+    name: "Sviluppo Rurale Regione Sicilia"
+    level: SICILIA
+    kind: html
+    url: "https://svilupporurale.regione.sicilia.it/bandi-aperti/"
+    parser: sicilia_bandi
+    enabled: true
+
+  - id: psr_sicilia
+    name: "PSR Sicilia"
+    level: SICILIA
+    kind: html
+    url: "https://www.psrsicilia.it/bandi-e-avvisi/"
+    parser: generic_links
+    enabled: true
+
+  - id: assessorato_agricoltura_sicilia
+    name: "Assessorato Agricoltura Regione Siciliana"
+    level: SICILIA
+    kind: html
+    url: "https://www.regione.sicilia.it/istituzioni/regione/strutture-regionali/assessorato-agricoltura-sviluppo-rurale-pesca-mediterranea/bandi-e-avvisi"
+    parser: sicilia_regione_bandi
+    enabled: true
+
+  - id: euroinfosicilia
+    name: "EuroInfoSicilia – FESR, FSC, Interreg"
+    level: SICILIA
+    kind: html
+    url: "https://www.euroinfosicilia.it/bandi/"
+    parser: generic_links
+    enabled: true
+
+  - id: sicilia_agricoltura
+    name: "Sicilia Agricoltura"
+    level: SICILIA
+    kind: html
+    url: "https://www.siciliaagricoltura.it/category/bandi/"
+    parser: generic_links
+    enabled: true
+
+  - id: sicilia_rurale
+    name: "Sicilia Rurale – PNRR e Sviluppo"
+    level: SICILIA
+    kind: html
+    url: "https://siciliarurale.eu/bandi/"
+    parser: generic_links
+    enabled: true
+
+  - id: terra_sicilia
+    name: "Terra – Portale Politiche Agricole Sicilia"
+    level: SICILIA
+    kind: html
+    url: "https://terra.regione.sicilia.it/bandi-e-avvisi/"
+    parser: generic_links
+    enabled: true
+
+  - id: dip_pesca_mediterranea
+    name: "Dipartimento Pesca Mediterranea Sicilia"
+    level: SICILIA
+    kind: html
+    url: "https://www.regione.sicilia.it/istituzioni/regione/strutture-regionali/assessorato-agricoltura-sviluppo-rurale-pesca-mediterranea/dipartimento-della-pesca-mediterranea/bandi-e-avvisi"
+    parser: generic_links
+    enabled: true
+
+  - id: reterurale_gal
+    name: "Rete Rurale – GAL Siciliani (LEADER)"
+    level: SICILIA
+    kind: html
+    url: "https://www.reterurale.it/leader"
+    parser: generic_links
+    enabled: true

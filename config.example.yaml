@@ -1,0 +1,89 @@
+telegram:
+  token: "${TELEGRAM_BOT_TOKEN}"
+  chat_ids:
+    - "${TELEGRAM_CHAT_ID}"
+
+schedule:
+  timezone: "Europe/Rome"
+  daily_time: "08:00"
+  weekly_day: "mon"
+  weekly_time: "08:05"
+  tolerance_minutes: 10
+
+db:
+  path: "data/state.sqlite3"
+
+http:
+  timeout_s: 25
+  max_retries: 3
+  backoff_base_s: 0.6
+  concurrency: 6
+  rate_limit_rps: 1.0
+  user_agent: "AgroBandiBot/1.0 (+https://github.com/legacoopsicilia/agroalimentare-bandi-bot)"
+
+filtering:
+  min_score: 2
+  prefetch_detail_if_score_at_least: 1
+  max_detail_fetch_per_source: 10
+  max_published_age_days: 365
+  include_keywords:
+    - agroalimentare
+    - agricoltura
+    - agricolo
+    - agricola
+    - cooperativa
+    - cooperativismo
+    - filiera
+    - agrifood
+    - zootecnia
+    - allevamento
+    - pesca
+    - acquacoltura
+    - vitivinicolo
+    - viticoltura
+    - biologico
+    - rurale
+    - sviluppo rurale
+    - PSR
+    - PSP
+    - FEASR
+    - FEAMP
+    - Leader
+    - GAL
+    - bioeconomia
+    - olivicoltura
+    - ortofrutta
+    - irrigazione
+    - PNRR
+    - contributo
+    - finanziamento
+    - bando
+    - avviso
+    - agevolazione
+    - incentivo
+    - misura
+    - giovani
+    - donne
+    - imprenditoria
+    - PMI
+    - microimpresa
+    - Parco Agrisolare
+    - Contratti di Filiera
+    - Generazione Terra
+    - ISMEA
+  exclude_keywords:
+    - concorso
+    - selezione personale
+    - borsa di studio
+    - assegno di ricerca
+    - tirocinio
+    - stage
+    - mobilità
+    - avviso di selezione
+    - graduatoria
+    - incarico
+
+weekly:
+  lookback_days: 7
+  due_soon_days: 14
+  max_items: 50
