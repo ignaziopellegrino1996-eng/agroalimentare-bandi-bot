@@ -139,6 +139,14 @@ sources:
     parser: generic_links
     enabled: true
 
+  - id: feampa_bandi
+    name: "FEAMPA – Bandi Pesca e Acquacoltura"
+    level: IT
+    kind: html
+    url: "https://www.feampabandionline.it/"
+    parser: generic_links
+    enabled: true
+
   # ─────────────────────────────────────────────────────────────────────────────
   # 🏴  LIVELLO SICILIA
   # ─────────────────────────────────────────────────────────────────────────────

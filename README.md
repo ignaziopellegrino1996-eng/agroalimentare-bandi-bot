@@ -2,7 +2,7 @@
 
 Bot Telegram per il monitoraggio automatico di bandi, avvisi e opportunità di finanziamento nel settore **agroalimentare**, sviluppato per **Legacoop Sicilia**.
 
-## Fonti monitorate (25 totali)
+## Fonti monitorate (26 totali)
 
 ### 🇪🇺 Europeo (7 fonti)
 - Funding & Tenders Portal (UE)
@@ -23,6 +23,7 @@ Bot Telegram per il monitoraggio automatico di bandi, avvisi e opportunità di f
 - Italian Food News
 - MIMIT – Nuova Sabatini, Transizione 5.0
 - INAIL – Bando ISI
+- FEAMPA – Bandi Pesca e Acquacoltura
 
 ### 🏴 Sicilia (9 fonti)
 - Sviluppo Rurale Regione Sicilia (CSR Sicilia PSP 2023-2027)
