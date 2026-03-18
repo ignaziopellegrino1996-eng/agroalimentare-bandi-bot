@@ -317,6 +317,101 @@ def parse_europafacile_bandi(html_text: str, base_url: str) -> list[dict]:
     return results
 
 
+def parse_feampa_bandi(html_text: str, base_url: str) -> list[dict]:
+    """Parser specifico per feampabandionline.it — struttura con .bandi-archive-title e card bandi."""
+    soup = _soup(html_text)
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    # Cerca i blocchi bando: ogni articolo/card ha un titolo linkato
+    for card in soup.select("article, .bando-item, .post, .entry"):
+        a = card.find("a", href=True)
+        if not a:
+            continue
+        title = a.get_text(strip=True)
+        if not title or len(title) < 10:
+            continue
+        url = urljoin(base_url, a["href"])
+        if url in seen:
+            continue
+        seen.add(url)
+        context = card.get_text(" ", strip=True)
+        results.append({
+            "title": title[:200],
+            "url": url,
+            "summary": _shorten(context),
+            "published": _extract_first_date(context),
+            "deadline": _extract_deadline(context),
+        })
+
+    # Fallback: cerca titoli con classe specifica
+    if not results:
+        for heading in soup.select(".bandi-archive-title, h2 a, h3 a, .entry-title a"):
+            if heading.name == "a":
+                a = heading
+            else:
+                a = heading.find("a", href=True)
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            if not title or len(title) < 10:
+                continue
+            url = urljoin(base_url, a["href"])
+            if url in seen:
+                continue
+            seen.add(url)
+            parent = a.find_parent(["article", "div", "li", "section"])
+            context = parent.get_text(" ", strip=True) if parent else title
+            results.append({
+                "title": title[:200],
+                "url": url,
+                "summary": _shorten(context),
+                "published": _extract_first_date(context),
+                "deadline": _extract_deadline(context),
+            })
+
+    if not results:
+        return parse_generic_links(html_text, base_url)
+    return results
+
+
+def parse_wordpress_news(html_text: str, base_url: str) -> list[dict]:
+    """Parser generico per siti WordPress con articoli news (es. OCM Vino)."""
+    soup = _soup(html_text)
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    for article in soup.select("article, .post, .entry, .et_pb_post"):
+        a = article.find("a", href=True)
+        if not a:
+            continue
+        # Prefer heading link
+        h = article.find(["h1", "h2", "h3"])
+        if h:
+            ha = h.find("a", href=True)
+            if ha:
+                a = ha
+        title = a.get_text(strip=True)
+        if not title or len(title) < 10:
+            continue
+        url = urljoin(base_url, a["href"])
+        if url in seen:
+            continue
+        seen.add(url)
+        context = article.get_text(" ", strip=True)
+        results.append({
+            "title": title[:200],
+            "url": url,
+            "summary": _shorten(context),
+            "published": _extract_first_date(context),
+            "deadline": _extract_deadline(context),
+        })
+
+    if not results:
+        return parse_generic_links(html_text, base_url)
+    return results
+
+
 _HTML_PARSERS: dict = {
     "generic_links": parse_generic_links,
     "masaf_bandi": parse_masaf_bandi,
@@ -326,6 +421,8 @@ _HTML_PARSERS: dict = {
     "sicilia_regione_bandi": parse_sicilia_regione_bandi,
     "fasi_bandi": parse_fasi_bandi,
     "europafacile_bandi": parse_europafacile_bandi,
+    "feampa_bandi": parse_feampa_bandi,
+    "wordpress_news": parse_wordpress_news,
 }
 
 

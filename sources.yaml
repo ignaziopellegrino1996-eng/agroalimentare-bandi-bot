@@ -140,10 +140,34 @@ sources:
     enabled: true
 
   - id: feampa_bandi
-    name: "FEAMPA – Bandi Pesca e Acquacoltura"
+    name: "FEAMPA – Bandi Pesca e Acquacoltura (nazionali)"
     level: IT
     kind: html
-    url: "https://www.feampabandionline.it/"
+    url: "https://www.feampabandionline.it/bandi/"
+    parser: feampa_bandi
+    enabled: true
+
+  - id: feampa_rss
+    name: "FEAMPA – Bandi RSS Feed"
+    level: IT
+    kind: rss
+    url: "https://www.feampabandionline.it/feed/"
+    parser: null
+    enabled: true
+
+  - id: ocm_vino
+    name: "OCM Vino – Misure e Bandi"
+    level: IT
+    kind: html
+    url: "https://www.ocmvino.it/news"
+    parser: wordpress_news
+    enabled: true
+
+  - id: eu_agriculture_funding
+    name: "Commissione EU – Finanziamenti Agricoltura e PAC"
+    level: EU
+    kind: html
+    url: "https://agriculture.ec.europa.eu/funding-and-tenders_it"
     parser: generic_links
     enabled: true
 
