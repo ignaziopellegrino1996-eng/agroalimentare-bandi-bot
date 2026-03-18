@@ -66,9 +66,12 @@ def _iso_or_none(text: Optional[str]) -> Optional[str]:
         except ValueError:
             pass
     try:
-        return dateparser.parse(text, dayfirst=True, fuzzy=True).date().isoformat()
+        parsed = dateparser.parse(text, dayfirst=True, fuzzy=True)
+        if parsed is not None:  # Bug #18 fix: guard against None before .date()
+            return parsed.date().isoformat()
     except Exception:
-        return None
+        pass
+    return None
 
 
 def _extract_deadline(text: str) -> Optional[str]:
@@ -149,7 +152,7 @@ def parse_generic_links(html_text: str, base_url: str) -> list[dict]:
         context = parent.get_text(" ", strip=True) if parent else text
         deadline = _extract_deadline(context)
         published = None
-        for tag in (parent or a).find_all("time") if parent else []:
+        for tag in (parent.find_all("time") if parent is not None else []):  # Bug #11 fix
             published = _iso_or_none(tag.get("datetime", ""))
             if published:
                 break

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import time as dt_time
 from pathlib import Path
 from typing import Optional
 
@@ -19,40 +19,40 @@ from telegram.ext import (
     filters,
 )
 
-from .config import AppConfig, load_sources
-from .db import Database, stable_item_id
-from .filtering import relevance_label, relevance_stars
+from .config import AppConfig
+from .db import Database
+from .filtering import relevance_stars
 from .formatting import format_item, chunk_messages
-from .http_client import HttpClient
 from .models import Item, SearchFilters, Source
 from .runner import run_daily_check_once, run_weekly_report_once
+from .http_client import HttpClient
 
 log = logging.getLogger(__name__)
 
 # ── Conversation states ────────────────────────────────────────────────────────
-FILTER_LEVEL, FILTER_RELEVANCE, FILTER_RECIPIENT, FILTER_STATUS, FILTER_KEYWORD, SHOW_RESULTS = range(6)
+FILTER_LEVEL, FILTER_RELEVANCE, FILTER_RECIPIENT, FILTER_STATUS, FILTER_KEYWORD = range(5)
 
-_LEVEL_OPTIONS = [("🇪🇺 Europeo", "EU"), ("🇮🇹 Nazionale", "IT"), ("🏴 Sicilia", "SICILIA"), ("🌍 Tutti", None)]
-_RELEVANCE_OPTIONS = [("⭐⭐⭐ Alta", "alta"), ("⭐⭐ Media", "media"), ("⭐ Tutte", None)]
+_LEVEL_OPTIONS = [("🇪🇺 Europeo", "EU"), ("🇮🇹 Nazionale", "IT"), ("🏴 Sicilia", "SICILIA"), ("🌍 Tutti", "ALL")]
+_RELEVANCE_OPTIONS = [("⭐⭐⭐ Alta", "alta"), ("⭐⭐ Media", "media"), ("⭐ Tutte", "ALL")]
 _RECIPIENT_OPTIONS = [
     ("🤝 Cooperative", "cooperative"),
     ("🏢 PMI", "pmi"),
     ("👩 Giovani/Donne", "giovani_donne"),
     ("🐟 Pesca", "pesca"),
-    ("👥 Tutti", None),
+    ("👥 Tutti", "ALL"),
 ]
 _STATUS_OPTIONS = [
     ("✅ Aperto", "aperto"),
     ("⏳ In scadenza", "in_scadenza"),
     ("📅 Atteso", "atteso"),
-    ("📋 Tutti", None),
+    ("📋 Tutti", "ALL"),
 ]
 
 _WELCOME = """
 🌾 <b>Agroalimentare — Bandi e Avvisi</b>
 <i>Monitoraggio automatico per Legacoop Sicilia</i>
 
-Monitoro <b>25 fonti</b> tra portali europei, nazionali e siciliani per trovare bandi, avvisi e opportunità nel settore agroalimentare.
+Monitoro <b>29 fonti</b> tra portali europei, nazionali e siciliani per trovare bandi, avvisi e opportunità nel settore agroalimentare.
 
 <b>Comandi disponibili:</b>
 /cerca — Cerca bandi con filtri
@@ -69,12 +69,12 @@ _HELP = """
 /cerca — Ricerca con filtri (livello, rilevanza, destinatari, stato, parola chiave)
 /ultimi — Mostra gli ultimi 10 bandi inseriti nel database
 /scadenze — Bandi in scadenza nei prossimi 30 giorni
-/fonti — Lista delle 25 fonti monitorate
+/fonti — Lista delle 29 fonti monitorate
 /test_daily — Esegue manualmente il controllo giornaliero
 
 <b>Come funziona la ricerca:</b>
 1. Avvia /cerca
-2. Seleziona i filtri desiderati con i pulsanti
+2. Seleziona i filtri con i pulsanti
 3. Naviga i risultati con i tasti ◀ ▶
 
 <b>Rilevanza cooperativa:</b>
@@ -106,18 +106,20 @@ def _filters_summary(f: SearchFilters) -> str:
     return " | ".join(parts) if parts else "Nessun filtro"
 
 
-def _row_to_item(row: dict) -> tuple[Item, str]:
-    return Item(
-        source_id=row["source_id"],
-        title=row["title"],
-        url=row["url"],
-        canonical_url=row["canonical_url"],
-        level=row["level"],
-        published=row.get("published"),
-        deadline=row.get("deadline"),
-        summary=row.get("summary", ""),
-        relevance_score=row.get("relevance_score", 0),
-    ), row.get("source_name", row["source_id"])
+def _filters_to_dict(f: SearchFilters) -> dict:
+    return {"l": f.level, "r": f.relevance, "rc": f.recipient, "s": f.status, "k": f.keyword}
+
+
+def _dict_to_filters(d: dict, page: int = 0) -> SearchFilters:
+    return SearchFilters(
+        level=d.get("l"), relevance=d.get("r"), recipient=d.get("rc"),
+        status=d.get("s"), keyword=d.get("k"), page=page,
+    )
+
+
+def _user_key(update: Update) -> str:
+    user = update.effective_user
+    return str(user.id) if user else "0"
 
 
 async def _send_paginated_results(
@@ -127,6 +129,9 @@ async def _send_paginated_results(
     filters_obj: SearchFilters,
     edit: bool = False,
 ) -> None:
+    # Persist filters so pagination callbacks can retrieve them (Bug #8 fix)
+    context.bot_data.setdefault("pg_filters", {})[_user_key(update)] = _filters_to_dict(filters_obj)
+
     rows, total = await db.search_items(filters_obj)
     page = filters_obj.page
     page_size = filters_obj.page_size
@@ -139,8 +144,9 @@ async def _send_paginated_results(
             "ℹ️ Nessun bando trovato con questi filtri.\n"
             "Prova ad allargare i criteri di ricerca."
         )
-        kb = [[InlineKeyboardButton("🔄 Nuova ricerca", callback_data="restart_search")]]
-        markup = InlineKeyboardMarkup(kb)
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔄 Nuova ricerca", callback_data="restart_search")
+        ]])
         if edit and update.callback_query:
             await update.callback_query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
         else:
@@ -157,13 +163,12 @@ async def _send_paginated_results(
         lines.append(format_item(item, src_name))
         lines.append("─" * 18)
 
+    # Bug #8 fix: callback_data uses short "pg:{N}" format (always ≤8 chars)
     nav_buttons: list[InlineKeyboardButton] = []
     if page > 0:
-        prev_data = json.dumps({"a": "page", "p": page - 1, "f": _filters_to_dict(filters_obj)})
-        nav_buttons.append(InlineKeyboardButton("◀ Prec.", callback_data=prev_data[:64]))
+        nav_buttons.append(InlineKeyboardButton("◀ Prec.", callback_data=f"pg:{page - 1}"))
     if page < total_pages - 1:
-        next_data = json.dumps({"a": "page", "p": page + 1, "f": _filters_to_dict(filters_obj)})
-        nav_buttons.append(InlineKeyboardButton("Succ. ▶", callback_data=next_data[:64]))
+        nav_buttons.append(InlineKeyboardButton("Succ. ▶", callback_data=f"pg:{page + 1}"))
 
     kb: list[list[InlineKeyboardButton]] = []
     if nav_buttons:
@@ -182,35 +187,37 @@ async def _send_paginated_results(
         )
 
 
-def _filters_to_dict(f: SearchFilters) -> dict:
-    return {
-        "l": f.level, "r": f.relevance, "rc": f.recipient,
-        "s": f.status, "k": f.keyword,
-    }
-
-
-def _dict_to_filters(d: dict, page: int = 0) -> SearchFilters:
-    return SearchFilters(
-        level=d.get("l"), relevance=d.get("r"), recipient=d.get("rc"),
-        status=d.get("s"), keyword=d.get("k"), page=page,
-    )
+def _row_to_item(row: dict) -> tuple[Item, str]:
+    import json as _json
+    return Item(
+        source_id=row["source_id"],
+        title=row["title"],
+        url=row["url"],
+        canonical_url=row["canonical_url"],
+        level=row["level"],
+        published=row.get("published"),
+        deadline=row.get("deadline"),
+        summary=row.get("summary", ""),
+        relevance_score=row.get("relevance_score", 0),
+        recipient_tags=tuple(_json.loads(row.get("recipient_tags") or "[]")),  # Bug #2 fix
+    ), row.get("source_name", row["source_id"])
 
 
 # ── Command handlers ──────────────────────────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(_WELCOME, parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(_WELCOME, parse_mode=ParseMode.HTML)
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(_HELP, parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(_HELP, parse_mode=ParseMode.HTML)
 
 
 async def cmd_ultimi(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db: Database = context.bot_data["db"]
     rows = await db.list_last_n_items(10)
     if not rows:
-        await update.message.reply_text("ℹ️ Nessun bando nel database ancora.")
+        await update.effective_message.reply_text("ℹ️ Nessun bando nel database ancora.")
         return
     lines = ["📋 <b>Ultimi 10 bandi aggiunti:</b>", ""]
     for row in rows:
@@ -218,14 +225,14 @@ async def cmd_ultimi(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         lines.append(format_item(item, src_name))
         lines.append("─" * 18)
     for chunk in chunk_messages(lines):
-        await update.message.reply_text(chunk, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        await update.effective_message.reply_text(chunk, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
 async def cmd_scadenze(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db: Database = context.bot_data["db"]
     rows = await db.list_expiring_items(30)
     if not rows:
-        await update.message.reply_text("ℹ️ Nessun bando in scadenza nei prossimi 30 giorni.")
+        await update.effective_message.reply_text("ℹ️ Nessun bando in scadenza nei prossimi 30 giorni.")
         return
     lines = ["⏳ <b>Bandi in scadenza entro 30 giorni:</b>", ""]
     for row in rows:
@@ -233,7 +240,7 @@ async def cmd_scadenze(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         lines.append(format_item(item, src_name))
         lines.append("─" * 18)
     for chunk in chunk_messages(lines):
-        await update.message.reply_text(chunk, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        await update.effective_message.reply_text(chunk, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
 async def cmd_fonti(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -242,8 +249,8 @@ async def cmd_fonti(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stats = await db.list_sources_stats()
     stats_map = {s["source_id"]: s["count"] for s in stats}
 
-    lines = ["📡 <b>Fonti monitorate (25 totali):</b>", ""]
-    by_level = {"EU": [], "IT": [], "SICILIA": []}
+    lines = ["📡 <b>Fonti monitorate:</b>", ""]
+    by_level: dict[str, list[Source]] = {}
     for s in sources:
         by_level.setdefault(s.level, []).append(s)
 
@@ -261,7 +268,7 @@ async def cmd_fonti(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             lines.append(f"  {status} {s.name}" + (f" ({count} bandi)" if count else ""))
         lines.append("")
 
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
 async def cmd_test_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -270,12 +277,12 @@ async def cmd_test_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     db: Database = context.bot_data["db"]
     chat_id = str(update.effective_chat.id)
 
-    await update.message.reply_text("🔄 Avvio controllo giornaliero manuale…")
+    await update.effective_message.reply_text("🔄 Avvio controllo giornaliero manuale…")
     try:
         async with HttpClient(cfg.http) as httpc:
             await run_daily_check_once(cfg, sources, db, httpc, chat_id)
     except Exception as e:
-        await update.message.reply_text(f"❌ Errore: {e}")
+        await update.effective_message.reply_text(f"❌ Errore: {e}")
         log.exception("test_daily error")
 
 
@@ -283,8 +290,22 @@ async def cmd_test_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def cerca_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["filters"] = {}
-    kb = [[InlineKeyboardButton(label, callback_data=f"lvl:{val or 'ALL'}")] for label, val in _LEVEL_OPTIONS]
-    await update.message.reply_text(
+    kb = [[InlineKeyboardButton(label, callback_data=f"lvl:{val}")] for label, val in _LEVEL_OPTIONS]
+    await update.effective_message.reply_text(
+        "🔍 <b>Ricerca Bandi</b>\n\n1️⃣ Seleziona il <b>livello territoriale</b>:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(kb),
+    )
+    return FILTER_LEVEL
+
+
+async def cerca_start_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point per il ConversationHandler da callback 'restart_search'."""
+    q = update.callback_query
+    await q.answer()
+    context.user_data["filters"] = {}
+    kb = [[InlineKeyboardButton(label, callback_data=f"lvl:{val}")] for label, val in _LEVEL_OPTIONS]
+    await q.edit_message_text(
         "🔍 <b>Ricerca Bandi</b>\n\n1️⃣ Seleziona il <b>livello territoriale</b>:",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(kb),
@@ -298,7 +319,7 @@ async def filter_level(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     val = q.data.replace("lvl:", "")
     context.user_data["filters"]["level"] = None if val == "ALL" else val
 
-    kb = [[InlineKeyboardButton(label, callback_data=f"rel:{val2 or 'ALL'}")] for label, val2 in _RELEVANCE_OPTIONS]
+    kb = [[InlineKeyboardButton(label, callback_data=f"rel:{val2}")] for label, val2 in _RELEVANCE_OPTIONS]
     await q.edit_message_text(
         "2️⃣ Filtra per <b>rilevanza cooperativa</b>:",
         parse_mode=ParseMode.HTML,
@@ -313,7 +334,7 @@ async def filter_relevance(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     val = q.data.replace("rel:", "")
     context.user_data["filters"]["relevance"] = None if val == "ALL" else val
 
-    kb = [[InlineKeyboardButton(label, callback_data=f"rec:{val2 or 'ALL'}")] for label, val2 in _RECIPIENT_OPTIONS]
+    kb = [[InlineKeyboardButton(label, callback_data=f"rec:{val2}")] for label, val2 in _RECIPIENT_OPTIONS]
     await q.edit_message_text(
         "3️⃣ Filtra per <b>destinatari</b>:",
         parse_mode=ParseMode.HTML,
@@ -328,7 +349,7 @@ async def filter_recipient(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     val = q.data.replace("rec:", "")
     context.user_data["filters"]["recipient"] = None if val == "ALL" else val
 
-    kb = [[InlineKeyboardButton(label, callback_data=f"sta:{val2 or 'ALL'}")] for label, val2 in _STATUS_OPTIONS]
+    kb = [[InlineKeyboardButton(label, callback_data=f"sta:{val2}")] for label, val2 in _STATUS_OPTIONS]
     await q.edit_message_text(
         "4️⃣ Filtra per <b>stato del bando</b>:",
         parse_mode=ParseMode.HTML,
@@ -345,7 +366,7 @@ async def filter_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     kb = [[
         InlineKeyboardButton("🔍 Cerca subito", callback_data="kw:SKIP"),
-        InlineKeyboardButton("✏️ Inserisci parola chiave", callback_data="kw:ASK"),
+        InlineKeyboardButton("✏️ Parola chiave", callback_data="kw:ASK"),
     ]]
     await q.edit_message_text(
         "5️⃣ Vuoi cercare per <b>parola chiave</b>?",
@@ -361,17 +382,15 @@ async def filter_keyword_choice(update: Update, context: ContextTypes.DEFAULT_TY
     if q.data == "kw:SKIP":
         return await _execute_search(update, context, edit=True)
     await q.edit_message_text(
-        "✏️ Scrivi la parola chiave da cercare (o /annulla per saltare):",
+        "✏️ Scrivi la parola chiave (o /annulla per saltare):",
         parse_mode=ParseMode.HTML,
     )
     return FILTER_KEYWORD
 
 
 async def filter_keyword_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip()
-    if text.startswith("/"):
-        context.user_data["filters"]["keyword"] = None
-    else:
+    text = update.effective_message.text.strip()
+    if not text.startswith("/"):
         context.user_data["filters"]["keyword"] = text
     return await _execute_search(update, context, edit=False)
 
@@ -391,34 +410,23 @@ async def _execute_search(update: Update, context: ContextTypes.DEFAULT_TYPE, ed
     return ConversationHandler.END
 
 
+# Bug #8 fix: pagination uses short "pg:{N}" callback_data, filters stored in bot_data
 async def pagination_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
     try:
-        data = json.loads(q.data)
-        if data.get("a") == "page":
-            filters_obj = _dict_to_filters(data.get("f", {}), page=data.get("p", 0))
-            db: Database = context.bot_data["db"]
-            await _send_paginated_results(update, context, db, filters_obj, edit=True)
+        page = int(q.data.split(":")[1])
+        user_key = _user_key(update)
+        f = context.bot_data.get("pg_filters", {}).get(user_key, {})
+        filters_obj = _dict_to_filters(f, page=page)
+        db: Database = context.bot_data["db"]
+        await _send_paginated_results(update, context, db, filters_obj, edit=True)
     except Exception as e:
         log.error("Pagination callback error: %s", e)
 
 
-async def restart_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    q = update.callback_query
-    await q.answer()
-    context.user_data["filters"] = {}
-    kb = [[InlineKeyboardButton(label, callback_data=f"lvl:{val or 'ALL'}")] for label, val in _LEVEL_OPTIONS]
-    await q.edit_message_text(
-        "🔍 <b>Ricerca Bandi</b>\n\n1️⃣ Seleziona il <b>livello territoriale</b>:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup(kb),
-    )
-    return FILTER_LEVEL
-
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❌ Ricerca annullata.")
+    await update.effective_message.reply_text("❌ Ricerca annullata.")
     return ConversationHandler.END
 
 
@@ -450,31 +458,42 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE) -> None:
                 log.exception("Weekly job error for chat %s: %s", chat_id, e)
 
 
-# ── Application factory ────────────────────────────────────────────────────────
+# ── Application factory (Bug #6 fix: sync, PTB v22 manages event loop) ────────
 
-async def run_bot_polling(cfg: AppConfig, sources: list[Source], db_path: Path) -> None:
-    from telegram.ext import JobQueue
-    from zoneinfo import ZoneInfo
+def run_bot_polling(cfg: AppConfig, sources: list[Source], db_path: Path) -> None:
+    """Synchronous entry point — PTB v22 manages the event loop via app.run_polling()."""
 
-    tz = cfg.tz()
+    # Bug #7 fix: use post_init/post_shutdown for proper DB lifecycle
+    async def post_init(app: Application) -> None:
+        db = Database(db_path)
+        await db.__aenter__()
+        await db.init()
+        app.bot_data["cfg"] = cfg
+        app.bot_data["sources"] = sources
+        app.bot_data["db"] = db
+        app.bot_data["pg_filters"] = {}
+        log.info("Database initialized at %s", db_path)
 
-    db = Database(db_path)
-    await db.__aenter__()
-    await db.init()
+    async def post_shutdown(app: Application) -> None:
+        db: Database = app.bot_data.get("db")
+        if db:
+            await db.__aexit__(None, None, None)
+            log.info("Database closed.")
 
     app = (
         Application.builder()
         .token(cfg.telegram.token_resolved())
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
         .build()
     )
 
-    app.bot_data["cfg"] = cfg
-    app.bot_data["sources"] = sources
-    app.bot_data["db"] = db
-
-    # /cerca conversation
+    # /cerca conversation — Bug #8: restart_search is an entry_point
     cerca_conv = ConversationHandler(
-        entry_points=[CommandHandler("cerca", cerca_start)],
+        entry_points=[
+            CommandHandler("cerca", cerca_start),
+            CallbackQueryHandler(cerca_start_from_callback, pattern=r"^restart_search$"),
+        ],
         states={
             FILTER_LEVEL: [CallbackQueryHandler(filter_level, pattern=r"^lvl:")],
             FILTER_RELEVANCE: [CallbackQueryHandler(filter_relevance, pattern=r"^rel:")],
@@ -496,26 +515,26 @@ async def run_bot_polling(cfg: AppConfig, sources: list[Source], db_path: Path) 
     app.add_handler(CommandHandler("fonti", cmd_fonti))
     app.add_handler(CommandHandler("test_daily", cmd_test_daily))
     app.add_handler(cerca_conv)
-    app.add_handler(CallbackQueryHandler(pagination_callback, pattern=r"^\{"))
-    app.add_handler(CallbackQueryHandler(restart_search_callback, pattern=r"^restart_search$"))
+    # Bug #8 fix: pattern matches short "pg:{N}" format
+    app.add_handler(CallbackQueryHandler(pagination_callback, pattern=r"^pg:\d+$"))
 
-    # Schedule jobs
+    # Bug #17 fix: use datetime.time() with explicit tzinfo instead of timetz()
+    tz = cfg.tz()
     h_daily, m_daily = map(int, cfg.schedule.daily_time.split(":"))
     h_weekly, m_weekly = map(int, cfg.schedule.weekly_time.split(":"))
     _weekday_map = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
     weekly_weekday = _weekday_map.get(cfg.schedule.weekly_day.lower(), 0)
 
     jq = app.job_queue
-    jq.run_daily(job_daily, time=datetime.now(tz).replace(hour=h_daily, minute=m_daily, second=0).timetz())
+    jq.run_daily(job_daily, time=dt_time(hour=h_daily, minute=m_daily, tzinfo=tz))
     jq.run_daily(
         job_weekly,
-        time=datetime.now(tz).replace(hour=h_weekly, minute=m_weekly, second=0).timetz(),
+        time=dt_time(hour=h_weekly, minute=m_weekly, tzinfo=tz),
         days=(weekly_weekday,),
     )
 
-    log.info("Bot polling started. Daily: %s, Weekly: %s %s", cfg.schedule.daily_time, cfg.schedule.weekly_day, cfg.schedule.weekly_time)
-
-    try:
-        await app.run_polling(drop_pending_updates=True)
-    finally:
-        await db.__aexit__(None, None, None)
+    log.info(
+        "Bot polling started. Daily: %s, Weekly: %s %s",
+        cfg.schedule.daily_time, cfg.schedule.weekly_day, cfg.schedule.weekly_time,
+    )
+    app.run_polling(drop_pending_updates=True)
