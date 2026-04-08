@@ -54,14 +54,17 @@ async def _fetch_and_filter(
     cfg: FilteringConfig,
     now: datetime,
 ) -> tuple[list[Item], Optional[str]]:
-    timeout = _SOURCE_TIMEOUTS.get(source.kind, 75)
+    http_timeout = _SOURCE_TIMEOUTS.get(source.kind, 75)
+    # wait_for uses 1.5x the HTTP timeout so it acts as a real outer guard
+    # (not just a duplicate of the inner httpx timeout)
+    outer_timeout = http_timeout * 1.5
     try:
         raw_items = await asyncio.wait_for(
             fetch_items_for_source(source, httpc, now),
-            timeout=timeout,
+            timeout=outer_timeout,
         )
     except asyncio.TimeoutError:
-        return [], f"Timeout after {timeout}s"
+        return [], f"Timeout after {outer_timeout:.0f}s"
     except Exception as e:
         return [], str(e)
 
@@ -168,7 +171,7 @@ async def run_daily_check_once(
                 continue
 
             new_items += 1
-            item_id = await db.upsert_seen_item(item, src_name.get(source.id, source.id))
+            await db.upsert_seen_item(item, src_name.get(source.id, source.id))
             await db.mark_delivered(chat_id, item_id)
             to_send.append((item, src_name.get(source.id, source.id)))
             ok_count += 1

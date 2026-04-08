@@ -129,8 +129,8 @@ async def _send_paginated_results(
     filters_obj: SearchFilters,
     edit: bool = False,
 ) -> None:
-    # Persist filters so pagination callbacks can retrieve them (Bug #8 fix)
-    context.bot_data.setdefault("pg_filters", {})[_user_key(update)] = _filters_to_dict(filters_obj)
+    # Persist filters in per-user storage so concurrent users don't overwrite each other
+    context.user_data["pg_filters"] = _filters_to_dict(filters_obj)
 
     rows, total = await db.search_items(filters_obj)
     page = filters_obj.page
@@ -176,7 +176,8 @@ async def _send_paginated_results(
     kb.append([InlineKeyboardButton("🔄 Nuova ricerca", callback_data="restart_search")])
     markup = InlineKeyboardMarkup(kb)
 
-    text = "\n".join(lines)[:3800]
+    chunks = chunk_messages(lines)
+    text = chunks[0] if chunks else ""
     if edit and update.callback_query:
         await update.callback_query.edit_message_text(
             text, parse_mode=ParseMode.HTML, reply_markup=markup, disable_web_page_preview=True
@@ -273,9 +274,15 @@ async def cmd_fonti(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_test_daily(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg: AppConfig = context.bot_data["cfg"]
+    allowed = set(cfg.telegram.chat_ids_resolved())
+    user_id = str(update.effective_user.id) if update.effective_user else None
+    chat_id = str(update.effective_chat.id)
+    if user_id not in allowed and chat_id not in allowed:
+        await update.effective_message.reply_text("⛔ Non autorizzato.")
+        return
+
     sources: list[Source] = context.bot_data["sources"]
     db: Database = context.bot_data["db"]
-    chat_id = str(update.effective_chat.id)
 
     await update.effective_message.reply_text("🔄 Avvio controllo giornaliero manuale…")
     try:
@@ -416,8 +423,7 @@ async def pagination_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await q.answer()
     try:
         page = int(q.data.split(":")[1])
-        user_key = _user_key(update)
-        f = context.bot_data.get("pg_filters", {}).get(user_key, {})
+        f = context.user_data.get("pg_filters", {})
         filters_obj = _dict_to_filters(f, page=page)
         db: Database = context.bot_data["db"]
         await _send_paginated_results(update, context, db, filters_obj, edit=True)
@@ -471,7 +477,6 @@ def run_bot_polling(cfg: AppConfig, sources: list[Source], db_path: Path) -> Non
         app.bot_data["cfg"] = cfg
         app.bot_data["sources"] = sources
         app.bot_data["db"] = db
-        app.bot_data["pg_filters"] = {}
         log.info("Database initialized at %s", db_path)
 
     async def post_shutdown(app: Application) -> None:

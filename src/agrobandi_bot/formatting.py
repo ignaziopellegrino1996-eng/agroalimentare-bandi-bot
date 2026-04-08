@@ -40,7 +40,7 @@ def format_item(item: Item, source_name: str) -> str:
     pub = _fmt_date(item.published)
     deadline = _fmt_date(item.deadline)
     summary = _esc((item.summary or "")[:300])
-    url = item.url
+    url = html.escape(item.url or "", quote=True)
 
     lines = [
         f"{level_emoji} {stars} <b>{title}</b>",
