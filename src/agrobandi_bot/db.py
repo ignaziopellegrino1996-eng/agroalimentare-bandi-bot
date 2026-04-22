@@ -242,6 +242,24 @@ class Database:
 
     # ── Runs ──────────────────────────────────────────────────────────────────
 
+    async def already_ran_today(self, *, kind: str, local_date: str) -> bool:
+        """
+        True se esiste un run `kind` già completato (finished_at non NULL) nella
+        data locale indicata (YYYY-MM-DD). Usato per idempotency: GitHub Actions
+        pianifica due cron UTC per coprire DST; senza questo check entrambi
+        manderebbero messaggi nella finestra di tolleranza.
+        """
+        cur = await self._db.execute(
+            """
+            SELECT 1 FROM runs
+            WHERE kind = ? AND finished_at IS NOT NULL
+              AND date(finished_at) = ?
+            LIMIT 1
+            """,
+            (kind, local_date),
+        )
+        return (await cur.fetchone()) is not None
+
     async def start_run(self, kind: str) -> int:
         cur = await self._db.execute(
             "INSERT INTO runs (kind, started_at) VALUES (?,?)", (kind, _now_iso())

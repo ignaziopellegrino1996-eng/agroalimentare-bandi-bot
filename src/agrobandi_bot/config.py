@@ -31,7 +31,7 @@ class ScheduleConfig:
     daily_time: str = "08:00"
     weekly_day: str = "mon"
     weekly_time: str = "08:05"
-    tolerance_minutes: int = 10
+    tolerance_minutes: int = 90
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ def load_config(path: Path) -> AppConfig:
             daily_time=sched.get("daily_time", "08:00"),
             weekly_day=sched.get("weekly_day", "mon"),
             weekly_time=sched.get("weekly_time", "08:05"),
-            tolerance_minutes=sched.get("tolerance_minutes", 10),
+            tolerance_minutes=sched.get("tolerance_minutes", 90),
         ),
         db=DbConfig(path=db.get("path", "data/state.sqlite3")),
         http=HttpConfig(

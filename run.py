@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import logging
 import os
+from datetime import datetime
 
 try:
     from dotenv import load_dotenv
@@ -69,8 +70,20 @@ async def _run_once_async(
     if not chat_ids:
         raise SystemExit("No TELEGRAM_CHAT_ID configured.")
 
+    # Idempotency: il cron UTC “gemello” (DST) può rientrare nella finestra di
+    # tolleranza dopo che un run dello stesso kind è già andato a buon fine oggi.
+    # Saltiamo il secondo per evitare doppio invio di messaggi Telegram.
+    kind = "weekly" if args.weekly_once else "daily"
+    today_local = datetime.now(cfg.tz()).date().isoformat()
+
     async with Database(db_path) as db:
         await db.init()
+        if await db.already_ran_today(kind=kind, local_date=today_local):
+            logger.info(
+                "Skip %s: già completato oggi (%s). Evito doppio invio.",
+                kind, today_local,
+            )
+            return 0
         async with HttpClient(cfg.http) as httpc:
             if args.weekly_once:
                 for chat_id in chat_ids:

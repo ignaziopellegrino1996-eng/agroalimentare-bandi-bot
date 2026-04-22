@@ -8,7 +8,10 @@ schedule:
   daily_time: "08:00"
   weekly_day: "mon"
   weekly_time: "08:05"
-  tolerance_minutes: 10
+  # Finestra ampia per non saltare esecuzioni quando il cron di GitHub Actions
+  # parte con 30-60+ minuti di ritardo. L'idempotency check in run.py evita
+  # doppi invii quando anche il cron “gemello” (DST) rientra nella finestra.
+  tolerance_minutes: 90
 
 db:
   path: "data/state.sqlite3"
